@@ -17,6 +17,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+import networkx as nx
 from networkx import (
     DiGraph,
     all_simple_paths,
@@ -39,13 +40,13 @@ from typing import Iterator, Dict, List
 
 matplotlib.use("Agg")
 
-__author__ = "Your Name"
+__author__ = "Dounia BENYAKHLAF"
 __copyright__ = "Universite Paris Diderot"
-__credits__ = ["Your Name"]
+__credits__ = ["Dounia BENYAKHLAF"]
 __license__ = "GPL"
 __version__ = "1.0.0"
-__maintainer__ = "Your Name"
-__email__ = "your@email.fr"
+__maintainer__ = "Dounia BENYAKHLAF"
+__email__ = "benyakhlaf.dounia@gmail.com"
 __status__ = "Developpement"
 
 
@@ -102,7 +103,16 @@ def read_fastq(fastq_file: Path) -> Iterator[str]:
     :param fastq_file: (Path) Path to the fastq file.
     :return: A generator object that iterate the read sequences.
     """
-    pass
+    if(isfile(fastq_file)):
+        with open(fastq_file, 'r') as fq_file:
+            iter_file = iter(fq_file)
+            for line in iter_file:
+                sequence = next(iter_file)
+                next(iter_file) # separateur
+                next(iter_file) # evaluation
+                yield sequence.strip()
+
+
 
 
 def cut_kmer(read: str, kmer_size: int) -> Iterator[str]:
@@ -111,7 +121,15 @@ def cut_kmer(read: str, kmer_size: int) -> Iterator[str]:
     :param read: (str) Sequence of a read.
     :return: A generator object that provides the kmers (str) of size kmer_size.
     """
-    pass
+    n = len(read)
+    for i in range(n):
+        if i+kmer_size <= n:
+            kmer = ""
+            for l in range(i, i+kmer_size):
+                kmer += read[l]
+            yield kmer
+
+
 
 
 def build_kmer_dict(fastq_file: Path, kmer_size: int) -> Dict[str, int]:
@@ -120,7 +138,15 @@ def build_kmer_dict(fastq_file: Path, kmer_size: int) -> Dict[str, int]:
     :param fastq_file: (str) Path to the fastq file.
     :return: A dictionnary object that identify all kmer occurrences.
     """
-    pass
+    kmers_dict = {}
+    sequences = read_fastq(fastq_file)
+    for seq in sequences:
+        kmers = cut_kmer(seq, kmer_size)
+        for kmer in kmers:
+            if kmer not in kmers_dict:
+                kmers_dict[kmer] = 0
+            kmers_dict[kmer] += 1
+    return kmers_dict
 
 
 def build_graph(kmer_dict: Dict[str, int]) -> DiGraph:
@@ -129,7 +155,14 @@ def build_graph(kmer_dict: Dict[str, int]) -> DiGraph:
     :param kmer_dict: A dictionnary object that identify all kmer occurrences.
     :return: A directed graph (nx) of all kmer substring and weight (occurrence).
     """
-    pass
+    graph = DiGraph()
+
+    for kmer, weight in kmer_dict.items():
+        prefix = kmer[:-1]
+        suffix = kmer[1:]
+        graph.add_edge(prefix, suffix, weight=weight)
+
+    return graph
 
 
 def remove_paths(
@@ -229,7 +262,11 @@ def get_starting_nodes(graph: DiGraph) -> List[str]:
     :param graph: (nx.DiGraph) A directed graph object
     :return: (list) A list of all nodes without predecessors
     """
-    pass
+    starting_nodes = []
+    for node in graph.nodes:
+        if(next(graph.predecessors(node), None) is None):
+            starting_nodes.append(node)
+    return starting_nodes
 
 
 def get_sink_nodes(graph: DiGraph) -> List[str]:
@@ -238,7 +275,11 @@ def get_sink_nodes(graph: DiGraph) -> List[str]:
     :param graph: (nx.DiGraph) A directed graph object
     :return: (list) A list of all nodes without successors
     """
-    pass
+    sink_nodes = []
+    for node in graph.nodes:
+        if(next(graph.successors(node), None) is None):
+            sink_nodes.append(node)
+    return sink_nodes
 
 
 def get_contigs(
@@ -251,7 +292,16 @@ def get_contigs(
     :param ending_nodes: (list) A list of nodes without successors
     :return: (list) List of [contiguous sequence and their length]
     """
-    pass
+    list_all_contigs = []
+    for start in starting_nodes:
+        for end in ending_nodes:
+            all_paths = all_simple_paths(graph, start, end)
+            for path in all_paths:
+                contig = path[0]
+                for i in range(1, len(path)):
+                    contig += path[i][-1]
+                list_all_contigs.append((contig, len(contig)))
+    return list_all_contigs
 
 
 def save_contigs(contigs_list: List[str], output_file: Path) -> None:
@@ -260,7 +310,10 @@ def save_contigs(contigs_list: List[str], output_file: Path) -> None:
     :param contig_list: (list) List of [contiguous sequence and their length]
     :param output_file: (Path) Path to the output file
     """
-    pass
+    with open(output_file, 'w') as contig_fasta:
+        for i, contig in enumerate(contigs_list):
+            contig_fasta.write(f">contig_{i} len={contig[1]}\n")
+            contig_fasta.write(f"{textwrap.fill(contig[0], width=80)}\n")
 
 
 def draw_graph(graph: DiGraph, graphimg_file: Path) -> None:  # pragma: no cover
@@ -282,7 +335,7 @@ def draw_graph(graph: DiGraph, graphimg_file: Path) -> None:  # pragma: no cover
     nx.draw_networkx_edges(
         graph, pos, edgelist=esmall, width=6, alpha=0.5, edge_color="b", style="dashed"
     )
-    # nx.draw_networkx(graph, pos, node_size=10, with_labels=False)
+    #nx.draw_networkx(graph, pos, node_size=10, with_labels=False)
     # save image
     plt.savefig(graphimg_file.resolve())
 
@@ -295,7 +348,18 @@ def main() -> None:  # pragma: no cover
     Main program function
     """
     # Get arguments
-    args = get_arguments()
+    #args = get_arguments()
+
+    # Test
+    # kmer_dict = build_kmer_dict("../data/eva71_hundred_reads.fq", 3)
+    # graph = build_graph(kmer_dict)
+    # print(graph)
+    # starting_nodes = get_starting_nodes(graph)
+    # ending_nodes = get_sink_nodes(graph)
+    # print(ending_nodes)
+    # contigs_list = get_contigs(graph, starting_nodes, ending_nodes)
+    # print(contigs_list)
+    # save_contigs(contigs_list, "test_perso.txt")
 
     # Fonctions de dessin du graphe
     # A decommenter si vous souhaitez visualiser un petit

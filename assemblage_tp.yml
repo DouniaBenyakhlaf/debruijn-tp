@@ -1,0 +1,12 @@
+name: assemblage_tp
+channels:
+    - conda-forge
+    - bioconda
+    - nodefaults
+dependencies:
+    - networkx
+    - pytest
+    - pytest-cov
+    - pylint
+    - matplotlib
+

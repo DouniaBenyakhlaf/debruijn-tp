@@ -14,6 +14,7 @@
 """Perform assembly based on debruijn graph."""
 
 import argparse
+import itertools
 import os
 import sys
 from pathlib import Path
@@ -180,8 +181,16 @@ def remove_paths(
     :param delete_sink_node: (boolean) True->We remove the last node of a path
     :return: (nx.DiGraph) A directed graph object
     """
-    pass
-
+    for path in path_list:
+        if(delete_entry_node and delete_sink_node):
+            graph.remove_nodes_from(path)
+        elif(delete_entry_node):
+            graph.remove_nodes_from(path[:-1])
+        elif(delete_sink_node):
+            graph.remove_nodes_from(path[1:])
+        graph.remove_nodes_from(path[1:-1])
+    return graph
+    
 
 def select_best_path(
     graph: DiGraph,
@@ -201,7 +210,22 @@ def select_best_path(
     :param delete_sink_node: (boolean) True->We remove the last node of a path
     :return: (nx.DiGraph) A directed graph object
     """
-    pass
+    indice_best_path = 0
+    std_weight = statistics.stdev(weight_avg_list)
+    if(std_weight > 0):
+        indice_best_path = weight_avg_list.index(max(weight_avg_list))
+    else :
+        std_length = statistics.stdev(path_length)
+        if(std_length > 0):
+            indice_best_path = path_length.index(max(path_length))
+        else:
+            random.seed(9001)
+            indice_best_path = random.randint(0, len(path_list))
+    del path_list[indice_best_path]
+    new_graph = remove_paths(graph, path_list,
+                            delete_entry_node, delete_sink_node)
+    return new_graph
+
 
 
 def path_average_weight(graph: DiGraph, path: List[str]) -> float:
@@ -224,8 +248,13 @@ def solve_bubble(graph: DiGraph, ancestor_node: str, descendant_node: str) -> Di
     :param descendant_node: (str) A downstream node in the graph
     :return: (nx.DiGraph) A directed graph object
     """
-    pass
-
+    path_list = list(all_simple_paths(graph, ancestor_node, descendant_node))
+    path_length = [len(l) for l in path_list]
+    weight_avg_list = []
+    for path in path_list:
+        weight_avg_list.append(path_average_weight(graph, path))
+    return select_best_path(graph, path_list, path_length, weight_avg_list, False, False)
+    
 
 def simplify_bubbles(graph: DiGraph) -> DiGraph:
     """Detect and explode bubbles
@@ -233,7 +262,22 @@ def simplify_bubbles(graph: DiGraph) -> DiGraph:
     :param graph: (nx.DiGraph) A directed graph object
     :return: (nx.DiGraph) A directed graph object
     """
-    pass
+    bubble = False
+    node_n = None
+    for node in graph.nodes:
+        predecessors_list = list(graph.predecessors(node))
+        if(len(predecessors_list) > 1):
+            combinaisons = list(itertools.combinations(predecessors_list, 2))
+            for comb in combinaisons:
+                ancestor_node = lowest_common_ancestor(graph, comb[0], comb[1])
+                if ancestor_node != None :
+                    bubble = True
+                    node_n = node
+                    break
+    if(bubble == True):
+        graph = simplify_bubbles(solve_bubble(graph, ancestor_node, node_n))
+    return graph
+
 
 
 def solve_entry_tips(graph: DiGraph, starting_nodes: List[str]) -> DiGraph:
